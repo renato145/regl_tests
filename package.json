@@ -1,0 +1,30 @@
+{
+  "name": "regl_try",
+  "version": "0.1.0",
+  "description": "Playing with regl",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "watch": "webpack --watch --mode=development",
+    "build": "webpack"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/renato145/d3sims.git"
+  },
+  "keywords": [],
+  "author": "Renato Hermoza",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/renato145/d3sims/issues"
+  },
+  "homepage": "https://github.com/renato145/d3sims#readme",
+  "devDependencies": {
+    "webpack": "^4.41.3",
+    "webpack-cli": "^3.3.10"
+  },
+  "dependencies": {
+    "d3": "^5.14.2",
+    "regl": "^1.3.13"
+  }
+}

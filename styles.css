@@ -1,0 +1,31 @@
+body {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+/* body {
+    margin: 0px;
+    overflow: hidden;
+} */
+
+text {
+    font-size: 2em;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    text-anchor: middle;
+    fill: black;
+}
+
+rect {
+    fill: #dd6a6a;
+    stroke: black;
+    stroke-width: 3px;
+}
+
+/* circle {
+    fill: #d1d3b0;
+} */
