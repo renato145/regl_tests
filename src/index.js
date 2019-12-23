@@ -2,26 +2,42 @@
 import { randomNormal, range } from 'd3';
 export const regl = require('regl')();
 
-const numPoints = 5000;
-
+const duration = 1500;
+const numPoints = 100000;
 // the size of the points we draw on screen
-const pointWidth = 4;
-
+const pointWidth = 10;
 // dimensions of the viewport we are drawing in
 const width = window.innerWidth;
 const height = window.innerHeight;
-
 // random number generator from d3-random
 const rng = randomNormal(0, 0.15);
 
-// create initial set of points
-const points = range(numPoints).map(() => ({
-  x: (rng() * width) + (width / 2),
-  y: (rng() * height) + (height / 2),
-  color: [0, Math.random(), 0],
-}));
+// layouts
+const greenCircleLayout = points => {
+  const rng = randomNormal(0, 0.05);
+  points.forEach((d, i) => {
+    d.x = (rng() + Math.cos(i)) * (width / 2.5) + width / 2;
+    d.y = (rng() + Math.sin(i)) * (height / 2.5) + height / 2;
+    d.color = [0, Math.random(), 0]; // random amount of green
+  });
+}
 
-const drawPoints = regl({
+const blueNormalLayout = points => {
+  const rng = randomNormal(0, 0.15);
+
+  points.forEach(d => {
+    d.x = (rng() * width) + (width / 2);
+    d.y = (rng() * height) + (height / 2);
+
+    // blue-green color
+    d.color = [0, 0.5, 0.9];
+  });
+}
+
+const layouts = [greenCircleLayout, blueNormalLayout];
+let currentLayout = 0;
+
+const createDrawPoints = points => regl({
   frag: `
   // set the precision of floating point numbers
   precision highp float;
@@ -37,8 +53,10 @@ const drawPoints = regl({
   `,
   vert: `
   // per vertex attributes
-  attribute vec2 position;
-  attribute vec3 color;
+  attribute vec2 positionStart;
+  attribute vec2 positionEnd;
+  attribute vec3 colorStart;
+  attribute vec3 colorEnd;
 
   // variables to send to the fragment shader
   varying vec3 fragColor;
@@ -47,6 +65,8 @@ const drawPoints = regl({
   uniform float pointWidth;
   uniform float stageWidth;
   uniform float stageHeight;
+  uniform float elapsed;
+  uniform float duration;
 
   // helper function to transform from pixel space to normalized
   // device coordinates (NDC). In NDC (0,0) is the middle,
@@ -62,22 +82,44 @@ const drawPoints = regl({
       -(2.0 * ((y / stageHeight) - 0.5)));
   }
 
+  // helper function to handle cubic easing (copied from d3 for consistency)
+  // note there are pre-made easing functions available via glslify.
+  float easeCubicInOut(float t) {
+    t *= 2.0;
+    t = (t <= 1.0 ? t * t * t : (t -= 2.0) * t * t + 2.0) / 2.0;
+    if (t > 1.0) {
+      t = 1.0;
+    }
+    return t;
+  }
+
   void main() {
     // update the size of a point based on the prop pointWidth
     gl_PointSize = pointWidth;
-
-    // send color to the fragment shader
-    fragColor = color;
-
+    // number between 0 and 1 indicating how far through the animation this
+    // vertex is.
+    float t;
+    // drawing without animation, so show end state immediately
+    if (duration == 0.0) {
+      t = 1.0;
+    // otherwise we are animating, so use cubic easing
+    } else {
+      t = easeCubicInOut(elapsed / duration);
+    }
+    // interpolate position
+    vec2 position = mix(positionStart, positionEnd, t);
+    // interpolate and send color to the fragment shader
+    fragColor = mix(colorStart, colorEnd, t);
     // scale to normalized device coordinates
-    // gl_Position is a special variable that holds the position
-    // of a vertex
+    // gl_Position is a special variable that holds the position of a vertex
     gl_Position = vec4(normalizeCoords(position), 0.0, 1.0);
   }`,
 
   attributes: {
-    position: points.map(d => [d.x, d.y]),
-    color: points.map(d => d.color),
+    positionStart: points.map(d => [d.sx, d.sy]),
+    positionEnd: points.map(d => [d.tx, d.ty]),
+    colorStart: points.map(d => d.colorStart),
+    colorEnd: points.map(d => d.colorEnd)
   },
 
   // params passed to the function
@@ -85,6 +127,8 @@ const drawPoints = regl({
     pointWidth: regl.prop('pointWidth'),
     stageWidth: regl.prop('stageWidth'),
     stageHeight: regl.prop('stageHeight'),
+    duration: regl.prop('duration'),
+    elapsed: ( ({ time }, { startTime = 0 }) => (time - startTime) * 1000)
   },
 
   // specify the number of points to draw
@@ -94,20 +138,62 @@ const drawPoints = regl({
   primitive: 'points',
 });
 
-// start the regl draw loop
-regl.frame(() => {
-  // clear the buffer
-  regl.clear({
-    // background color (black)
-    color: [0, 0, 0, 1],
-    depth: 1,
+const animate = ( layout, points ) => {
+  console.log('Animating with new layout');
+  points.forEach(d => {
+    d.sx = d.tx;
+    d.sy = d.ty;
+    d.colorStart = d.colorEnd;
   });
 
-  // draw the points using our created regl func
-  // note that the arguments are available via `regl.prop`.
-  drawPoints({
-    pointWidth,
-    stageWidth: width,
-    stageHeight: height,
+  layout(points);
+  points.forEach(d => {
+    d.tx = d.x;
+    d.ty = d.y;
+    d.colorEnd = d.color;
+  })
+
+  const drawPoints = createDrawPoints(points);
+
+  // start animation loop
+  let startTime = null;
+  const frameLoop = regl.frame(({ time }) => {
+    if (startTime === null) {
+      startTime = time;
+    }
+
+    // clear the buffer
+    regl.clear({
+      // background color (black)
+      color: [0, 0, 0, 1],
+      depth: 1,
+    });
+
+    // draw the points using our created regl func
+    // note that the arguments are available via `regl.prop`.
+    drawPoints({
+      pointWidth,
+      stageWidth: width,
+      stageHeight: height,
+      duration,
+      startTime
+    });
+
+    if (time - startTime > (duration / 1000)) {
+      console.log('done animating, moving to next layout');
+      frameLoop.cancel();
+      currentLayout = (currentLayout + 1) % layouts.length;
+      animate(layouts[currentLayout], points)
+    }
   });
-});
+};
+
+// create initial set of points
+const points = range(numPoints).map(() => ({
+  tx: width / 2,
+  ty: height / 2,
+  colorEnd: [0, 0, 0],
+}));
+
+// initial animation
+animate(layouts[currentLayout], points);
